@@ -1,0 +1,61 @@
+# tf_write_security.rules — Terraform IAM and network security rules.
+# Technology: tf | Capability: write
+# Covers: IAM least privilege, overly permissive policies, logging disabled, deletion protection.
+
+rule no-iam-star-action {
+  enabled true
+  priority 95
+  severity error
+  DENY write
+  IF path GLOB "**/*.tf" AND content LINE_REGEX "actions\\s*=\\s*\\[\\s*\"\\*\"\\s*\\]"
+  OR path GLOB "**/*.tf" AND content CONTAINS "\"Effect\": \"Allow\"" AND content CONTAINS "\"Action\": \"*\""
+  MESSAGE "IAM policy grants all actions ('*'). This violates least-privilege. Enumerate only the specific actions your resource requires (e.g., [\"s3:GetObject\", \"s3:PutObject\"])."
+}
+
+rule no-iam-star-resource {
+  enabled true
+  priority 90
+  severity error
+  DENY write
+  IF path GLOB "**/*.tf" AND content LINE_REGEX "resources\\s*=\\s*\\[\\s*\"\\*\"\\s*\\]" AND content CONTAINS "aws_iam"
+  MESSAGE "IAM policy applies to all resources ('*'). Scope the policy to specific ARNs to prevent unintended access to other resources in the account."
+}
+
+rule no-cloudtrail-disabled {
+  enabled true
+  priority 85
+  severity error
+  DENY write
+  IF path GLOB "**/*.tf" AND content CONTAINS "aws_cloudtrail" AND content CONTAINS "enable_logging" AND content CONTAINS "false"
+  MESSAGE "CloudTrail logging is disabled. Audit logging is required for compliance and incident response. Set enable_logging = true."
+}
+
+rule no-rds-without-deletion-protection {
+  enabled true
+  priority 85
+  severity warning
+  ASK write
+  IF path GLOB "**/*.tf" AND content CONTAINS "aws_db_instance" AND content NOT CONTAINS "deletion_protection"
+  OR path GLOB "**/*.tf" AND content CONTAINS "aws_rds_cluster" AND content NOT CONTAINS "deletion_protection"
+  MESSAGE "RDS instance without deletion_protection = true. A terraform destroy or accidental apply could permanently delete your database. Set deletion_protection = true for production databases."
+  PROMPT "Is this a production database? Add deletion_protection = true to prevent accidental destruction. Also consider skip_final_snapshot = false for disaster recovery."
+}
+
+rule no-security-group-all-egress {
+  enabled true
+  priority 80
+  severity warning
+  ASK write
+  IF path GLOB "**/*.tf" AND content CONTAINS "aws_security_group" AND content LINE_REGEX "egress\\s*\\{" AND content CONTAINS "0.0.0.0/0" AND content LINE_REGEX "to_port\\s*=\\s*0"
+  MESSAGE "Security group allows all outbound traffic. For sensitive workloads, restrict egress to only required destinations and ports to limit blast radius of a compromise."
+  PROMPT "Does this workload need unrestricted outbound access? Consider restricting egress to specific CIDRs and ports (e.g., RDS port 5432, HTTPS 443 to known services)."
+}
+
+rule no-s3-versioning-disabled {
+  enabled true
+  priority 70
+  severity warning
+  LOG write
+  IF path GLOB "**/*.tf" AND content CONTAINS "aws_s3_bucket" AND content NOT CONTAINS "versioning" AND content NOT CONTAINS "aws_s3_bucket_versioning"
+  MESSAGE "S3 bucket without versioning. Versioning protects against accidental deletion and overwrites. Add an aws_s3_bucket_versioning resource with status = 'Enabled' for important data."
+}

@@ -1,0 +1,56 @@
+# tf_write_safety.rules — Terraform IaC safety rules.
+# Technology: tf | Capability: write
+# Covers: hardcoded secrets, public resources, missing encryption, deletion protection.
+
+rule no-hardcoded-credentials {
+  enabled true
+  priority 100
+  severity error
+  DENY write
+  IF path GLOB "**/*.tf" AND content LINE_REGEX "(access_key|secret_key|password|token)\\s*=\\s*\"[^\"$]{8,}\""
+  MESSAGE "Hardcoded credentials in Terraform files are committed to version control. Use environment variables (AWS_ACCESS_KEY_ID), terraform.tfvars (git-ignored), or a secrets manager."
+}
+
+rule no-public-s3-bucket {
+  enabled true
+  priority 95
+  severity error
+  DENY write
+  IF path GLOB "**/*.tf" AND content CONTAINS "acl" AND content CONTAINS "public-read"
+  OR path GLOB "**/*.tf" AND content CONTAINS "block_public_acls" AND content CONTAINS "false"
+  OR path GLOB "**/*.tf" AND content CONTAINS "block_public_policy" AND content CONTAINS "false"
+  MESSAGE "Terraform is creating a public S3 bucket. All objects will be accessible to the internet. Use presigned URLs or CloudFront for controlled access."
+}
+
+rule no-unencrypted-storage {
+  enabled true
+  priority 80
+  severity warning
+  ASK write
+  IF path GLOB "**/*.tf" AND content CONTAINS "aws_db_instance" AND content NOT CONTAINS "storage_encrypted"
+  OR path GLOB "**/*.tf" AND content CONTAINS "aws_ebs_volume" AND content NOT CONTAINS "encrypted"
+  OR path GLOB "**/*.tf" AND content CONTAINS "aws_rds_cluster" AND content NOT CONTAINS "storage_encrypted"
+  MESSAGE "Storage resource without encryption detected. Set storage_encrypted = true (RDS) or encrypted = true (EBS) to enable encryption at rest."
+  PROMPT "Does this storage resource require encryption? For production workloads handling any sensitive data, encryption at rest should always be enabled."
+}
+
+rule no-open-ingress-all-traffic {
+  enabled true
+  priority 95
+  severity error
+  DENY write
+  IF path GLOB "**/*.tf" AND content LINE_REGEX "cidr_blocks\\s*=\\s*\\[\\s*\"0\\.0\\.0\\.0/0\"\\s*\\]" AND content LINE_REGEX "from_port\\s*=\\s*0"
+  OR path GLOB "**/*.tf" AND content LINE_REGEX "ipv6_cidr_blocks.*::/0" AND content LINE_REGEX "from_port\\s*=\\s*0"
+  MESSAGE "Security group allows all inbound traffic from anywhere (0.0.0.0/0 on port 0). Restrict to specific CIDR ranges and necessary ports only."
+}
+
+rule ask-terraform-destroy {
+  enabled true
+  priority 90
+  severity error
+  ASK execution
+  IF command CONTAINS "terraform destroy"
+  OR command CONTAINS "terraform apply -destroy"
+  MESSAGE "terraform destroy will delete all managed infrastructure. This is irreversible for stateful resources (databases, S3 buckets). Verify the workspace and confirm this is intentional."
+  PROMPT "Which Terraform workspace and state is targeted? Are there any stateful resources (RDS, S3 with data) that would be permanently destroyed?"
+}
