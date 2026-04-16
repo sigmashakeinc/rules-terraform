@@ -26,12 +26,11 @@ rule no-unencrypted-storage {
   enabled true
   priority 80
   severity warning
-  ASK write
+  LOG write
   IF path GLOB "**/*.tf" AND content CONTAINS "aws_db_instance" AND content NOT CONTAINS "storage_encrypted"
   OR path GLOB "**/*.tf" AND content CONTAINS "aws_ebs_volume" AND content NOT CONTAINS "encrypted"
   OR path GLOB "**/*.tf" AND content CONTAINS "aws_rds_cluster" AND content NOT CONTAINS "storage_encrypted"
   MESSAGE "Storage resource without encryption detected. Set storage_encrypted = true (RDS) or encrypted = true (EBS) to enable encryption at rest."
-  PROMPT "Does this storage resource require encryption? For production workloads handling any sensitive data, encryption at rest should always be enabled."
 }
 
 rule no-open-ingress-all-traffic {

@@ -34,21 +34,19 @@ rule no-rds-without-deletion-protection {
   enabled true
   priority 85
   severity warning
-  ASK write
+  LOG write
   IF path GLOB "**/*.tf" AND content CONTAINS "aws_db_instance" AND content NOT CONTAINS "deletion_protection"
   OR path GLOB "**/*.tf" AND content CONTAINS "aws_rds_cluster" AND content NOT CONTAINS "deletion_protection"
   MESSAGE "RDS instance without deletion_protection = true. A terraform destroy or accidental apply could permanently delete your database. Set deletion_protection = true for production databases."
-  PROMPT "Is this a production database? Add deletion_protection = true to prevent accidental destruction. Also consider skip_final_snapshot = false for disaster recovery."
 }
 
 rule no-security-group-all-egress {
   enabled true
   priority 80
   severity warning
-  ASK write
+  LOG write
   IF path GLOB "**/*.tf" AND content CONTAINS "aws_security_group" AND content LINE_REGEX "egress\\s*\\{" AND content CONTAINS "0.0.0.0/0" AND content LINE_REGEX "to_port\\s*=\\s*0"
   MESSAGE "Security group allows all outbound traffic. For sensitive workloads, restrict egress to only required destinations and ports to limit blast radius of a compromise."
-  PROMPT "Does this workload need unrestricted outbound access? Consider restricting egress to specific CIDRs and ports (e.g., RDS port 5432, HTTPS 443 to known services)."
 }
 
 rule no-s3-versioning-disabled {

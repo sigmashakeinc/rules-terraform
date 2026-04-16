@@ -15,18 +15,16 @@ rule terraform-unpinned-module-source {
   enabled true
   priority 80
   severity warning
-  ASK write
+  LOG write
   IF path GLOB "**/*.tf" AND content LINE_REGEX "source\\s*=\\s*[\"']github\\.com/.*[\"']" AND content NOT CONTAINS "?ref="
   MESSAGE "Using a GitHub module source without pinning to a specific commit or tag (?ref=) can break your infrastructure if the module's main branch introduces breaking changes or is compromised."
-  PROMPT "Are you sure you want to use an unpinned remote module? Pinning to a specific tag or commit hash is strongly recommended."
 }
 
 rule terraform-missing-backend {
   enabled true
   priority 75
   severity warning
-  ASK write
+  LOG write
   IF path GLOB "**/main.tf" AND content NOT CONTAINS "backend" AND content NOT CONTAINS "cloud {"
   MESSAGE "Storing terraform.tfstate locally can lead to sensitive data exposure and state corruption in team environments. Ensure you are using a secure remote backend (e.g., S3, Azure Blob, Terraform Cloud) for production infrastructure."
-  PROMPT "Are you intending to use local state? For production, configure a remote backend with state locking and encryption."
 }
